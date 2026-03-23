@@ -27,13 +27,28 @@ def heartbeat():
     data = request.get_json()
     device = data.get("device", "unknown")
 
-    DISPOSITIVOS[device] = {
-        "last_seen": time.time(),
-        "alert_sent": False
-    }
+    ahora = time.time()
+
+    # 🟢 PRIMERA VEZ (INICIADA)
+    if device not in DISPOSITIVOS:
+        notify_slack(f"🟢 {device} INICIADA")
+
+        DISPOSITIVOS[device] = {
+            "last_seen": ahora,
+            "estado": "online"
+        }
+        return {"status": "ok"}
+
+    # 🟢 VOLVIÓ DESPUÉS DE ESTAR OFFLINE
+    if DISPOSITIVOS[device]["estado"] == "offline":
+        notify_slack(f"🟢 {device} ONLINE")
+
+        DISPOSITIVOS[device]["estado"] = "online"
+
+    # Actualizar tiempo
+    DISPOSITIVOS[device]["last_seen"] = ahora
 
     print(f"💓 {device} activo")
-
     return {"status": "ok"}
 
 def monitor():
@@ -43,13 +58,10 @@ def monitor():
         for device, info in DISPOSITIVOS.items():
             tiempo = ahora - info["last_seen"]
 
-            if tiempo > TIMEOUT and not info["alert_sent"]:
+            # 🚨 OFFLINE
+            if tiempo > TIMEOUT and info["estado"] == "online":
                 notify_slack(f"🚨 {device} OFFLINE")
-                DISPOSITIVOS[device]["alert_sent"] = True
-
-            elif tiempo <= TIMEOUT and info["alert_sent"]:
-                notify_slack(f"🟢 {device} ONLINE")
-                DISPOSITIVOS[device]["alert_sent"] = False
+                DISPOSITIVOS[device]["estado"] = "offline"
 
         time.sleep(5)
 
