@@ -1,54 +1,55 @@
 import os
-from flask import Flask
+from flask import Flask, request
 import time
 import requests
-import json
 import threading
 
 app = Flask(__name__)
 
-ULTIMO_LATIDO = time.time()
+DISPOSITIVOS = {}
 TIMEOUT = 15
-alert_sent = False
 
 SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
 
 def notify_slack(message):
-    print("📩 Enviando a Slack:", message)
+    print("📩", message)
     try:
         requests.post(
             SLACK_WEBHOOK_URL,
             json={"text": message},
             timeout=5
         )
-    except Exception as e:
-        print("❌ Error Slack:", e)
+    except:
+        pass
 
 @app.route('/heartbeat', methods=['POST'])
 def heartbeat():
-    global ULTIMO_LATIDO, alert_sent
+    data = request.get_json()
+    device = data.get("device", "unknown")
 
-    ULTIMO_LATIDO = time.time()
-    print("💓 Latido recibido")
+    DISPOSITIVOS[device] = {
+        "last_seen": time.time(),
+        "alert_sent": False
+    }
 
-    if alert_sent:
-        notify_slack("🟢 Raspberry volvió a estar ONLINE")
-        alert_sent = False
+    print(f"💓 {device} activo")
 
     return {"status": "ok"}
 
 def monitor():
-    global alert_sent
-
     while True:
-        tiempo = time.time() - ULTIMO_LATIDO
-        print(f"⏱ Tiempo sin latido: {int(tiempo)}s")
+        ahora = time.time()
 
-        if tiempo > TIMEOUT:
-            if not alert_sent:
-                print("🚨 SIN SEÑAL")
-                notify_slack("🚨 Raspberry OFFLINE o apagada")
-                alert_sent = True
+        for device, info in DISPOSITIVOS.items():
+            tiempo = ahora - info["last_seen"]
+
+            if tiempo > TIMEOUT and not info["alert_sent"]:
+                notify_slack(f"🚨 {device} OFFLINE")
+                DISPOSITIVOS[device]["alert_sent"] = True
+
+            elif tiempo <= TIMEOUT and info["alert_sent"]:
+                notify_slack(f"🟢 {device} ONLINE")
+                DISPOSITIVOS[device]["alert_sent"] = False
 
         time.sleep(5)
 
