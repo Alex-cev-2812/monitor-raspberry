@@ -17,7 +17,7 @@ def notify_slack(message):
         requests.post(
             SLACK_WEBHOOK_URL,
             json={"text": message},
-            timeout=5
+            timeout=6
         )
     except:
         pass
